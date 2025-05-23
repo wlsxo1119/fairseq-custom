@@ -50,4 +50,5 @@ fairseq-train data-bin/wmt17_en_de \
   --ema-decay 0.9999 \
   --patience 10 \
   --tensorboard-logdir ${save_dir}/tensorboard \
-  --save-dir ${save_dir}
+  --save-dir ${save_dir} \
+  --initial-alpha 0 --max-alpha 0.5 --soft-target-temperature 2.0 --max-margin-lambda 5.0 

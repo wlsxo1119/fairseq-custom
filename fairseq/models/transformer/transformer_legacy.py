@@ -185,6 +185,8 @@ def base_architecture(args):
     args.decoder_normalize_before = getattr(args, "decoder_normalize_before", False)
     args.decoder_learned_pos = getattr(args, "decoder_learned_pos", False)
     args.attention_dropout = getattr(args, "attention_dropout", 0.0)
+    args.drophead_prob = getattr(args, "drophead_prob", 0.0)
+
     args.activation_dropout = getattr(args, "activation_dropout", 0.0)
     args.activation_fn = getattr(args, "activation_fn", "relu")
     args.dropout = getattr(args, "dropout", 0.1)

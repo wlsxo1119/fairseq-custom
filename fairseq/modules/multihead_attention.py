@@ -90,6 +90,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         xformers_blocksparse_blocksize: Optional[
             int
         ] = 16,  # This should be part of the config
+        drophead_prob=0.0,
     ):
         super().__init__(dictionary)
 
@@ -106,6 +107,7 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         self.dropout_module = FairseqDropout(
             dropout, module_name=self.__class__.__name__
         )
+        self.drophead_prob = drophead_prob
 
         self.head_dim = embed_dim // num_heads
         assert (
@@ -736,6 +738,45 @@ class MultiheadAttention(FairseqIncrementalDecoder):
         attn_weights_float = utils.softmax(
             attn_weights, dim=-1, onnx_trace=self.onnx_trace
         )
+        # <<< 여기에 DropHead 로직 추가 시작 >>>
+        if hasattr(self, 'drophead_prob') and self.drophead_prob > 0.0 and self.training:
+            # attn_weights_float의 현재 shape: (bsz * self.num_heads, tgt_len, src_len)
+            
+            # DropHead 적용을 위해 (bsz, self.num_heads, tgt_len, src_len)으로 reshape
+            current_bsz, current_tgt_len, current_src_len = bsz, tgt_len, src_len 
+            # 실제 shape에서 가져오는 것이 더 안전할 수 있지만, 함수 인자로 받은 bsz, tgt_len, src_len 사용
+            
+            attn_weights_reshaped = attn_weights_float.view(
+                current_bsz, self.num_heads, current_tgt_len, current_src_len
+            )
+            
+            # 헤드 드롭을 위한 마스크 생성
+            # 마스크 shape: (bsz, self.num_heads, 1, 1) -> tgt_len, src_len 차원에 브로드캐스팅
+            keep_prob = 1.0 - self.drophead_prob
+            
+            # 각 배치 아이템 및 헤드에 대해 독립적으로 드롭 여부 결정
+            head_mask = torch.full(
+                (current_bsz, self.num_heads, 1, 1), 
+                keep_prob, 
+                device=attn_weights_float.device, 
+                dtype=attn_weights_float.dtype
+            )
+            head_mask = torch.bernoulli(head_mask) # keep_prob 확률로 1 (유지), (1-keep_prob) 확률로 0 (드롭)
+            
+            # 마스크 적용
+            attn_weights_reshaped = attn_weights_reshaped * head_mask
+            
+            # 스케일링: 남아있는 헤드들의 출력을 조정하여 평균적인 총합을 유지
+            # drophead_prob이 1에 가까워 keep_prob이 0에 가까워지면 0으로 나누는 것을 방지
+            if keep_prob > 1e-9: # 또는 float 비교에 더 안전한 값 사용
+                attn_weights_reshaped = attn_weights_reshaped / keep_prob
+            
+            # 원래 shape으로 복원: (bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_float = attn_weights_reshaped.view(
+                current_bsz * self.num_heads, current_tgt_len, current_src_len
+            )
+        # <<< DropHead 로직 추가 끝 >>>
+
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 

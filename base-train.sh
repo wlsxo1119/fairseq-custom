@@ -20,7 +20,7 @@ fairseq-train data-bin/wmt17_en_de \
   --share-decoder-input-output-embed \
   --optimizer adam --adam-betas '(0.9, 0.98)' --adam-eps 1e-8 --clip-norm 1.0 \
   --lr ${lr} --lr-scheduler inverse_sqrt --warmup-updates 16000 \
-  --dropout 0.1 --attention-dropout 0.1 --weight-decay 0.0001 \
+  --dropout 0.1 --attention-dropout 0.1 --drophead-prob 0.1 --weight-decay 0.0001 \
   --criterion label_smoothed_cross_entropy \
    --label-smoothing 0.1 \
   --max-tokens 4096 \

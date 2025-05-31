@@ -20,6 +20,7 @@ from .fp32_batch_norm import Fp32BatchNorm
 from .fp32_group_norm import Fp32GroupNorm
 from .fp32_instance_norm import Fp32InstanceNorm
 from .gelu import gelu, gelu_accurate
+from .swiglu import swiglu_custom
 from .grad_multiply import GradMultiply
 from .gumbel_vector_quantizer import GumbelVectorQuantizer
 from .kmeans_vector_quantizer import KmeansVectorQuantizer
@@ -73,6 +74,7 @@ __all__ = [
     "Fp32InstanceNorm",
     "gelu",
     "gelu_accurate",
+    "swiglu_custom",
     "GradMultiply",
     "GumbelVectorQuantizer",
     "KmeansVectorQuantizer",

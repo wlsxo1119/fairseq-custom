@@ -107,15 +107,31 @@ class MarginTokenLoss(FairseqCriterion):
         probs = F.softmax(logits / self.temperature, dim=-1)
         
         # Make UNK Input (Margin Token Loss)
-        unk_input = {}
-        for key, val in sample['net_input'].items():
-            if key in ['src_tokens']:
-                val_clone = val.clone()
-                mask = ~((val_clone == self.padding_idx) | (val_clone == self.bos_idx) | (val_clone == self.eos_idx))
-                val_clone[mask] = self.unk_idx
-                unk_input[key] = val_clone
-            else:
-                unk_input[key] = val
+        # unk_input = {}
+        # for key, val in sample['net_input'].items():
+        #     if key in ['src_tokens']:
+        #         val_clone = val.clone()
+        #         mask = ~((val_clone == self.padding_idx) | (val_clone == self.bos_idx) | (val_clone == self.eos_idx))
+        #         val_clone[mask] = self.unk_idx
+        #         unk_input[key] = val_clone
+        #     else:
+        #         unk_input[key] = val
+
+        # src_tokens', 'src_lengths', 'prev_output_tokens
+        bz = sample["net_input"]['src_tokens'].size(0)
+        unk_src_tokens = torch.tensor([self.unk_idx, self.eos_idx]).unsqueeze(0).expand(bz, 2).to(sample['net_input']['src_tokens'].device)
+        unk_src_lengths = torch.full((bz,), 2, dtype=sample['net_input']['src_lengths'].dtype, device=sample['net_input']['src_lengths'].device)
+        unk_input = {
+            'src_tokens': unk_src_tokens,
+            'src_lengths': unk_src_lengths,
+            'prev_output_tokens': sample["net_input"]['prev_output_tokens'].clone(),
+        }
+        
+        # print(unk_input.keys(),'!!!')
+        # print(unk_input['src_tokens'].shape, 'UNK Input Shape')
+        # print(unk_input['src_tokens'])
+        # print(unk_input['src_lengths'].shape, 'UNK Input Shape')
+        # print(unk_input['src_lengths'])
                 
         # Run LM Style Model
         unk_output = model(**unk_input)

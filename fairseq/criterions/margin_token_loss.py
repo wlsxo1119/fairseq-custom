@@ -104,35 +104,19 @@ class MarginTokenLoss(FairseqCriterion):
         lprobs = model.get_normalized_probs(net_output, log_probs=True)  # (B, T, V) 
         logits = net_output[0]
         target = sample["target"]
-        probs = F.softmax(logits / self.temperature, dim=-1)
+        #probs = F.softmax(logits / self.temperature, dim=-1)
+        probs = F.softmax(logits / 0.5, dim=-1)
         
         # Make UNK Input (Margin Token Loss)
-        # unk_input = {}
-        # for key, val in sample['net_input'].items():
-        #     if key in ['src_tokens']:
-        #         val_clone = val.clone()
-        #         mask = ~((val_clone == self.padding_idx) | (val_clone == self.bos_idx) | (val_clone == self.eos_idx))
-        #         val_clone[mask] = self.unk_idx
-        #         unk_input[key] = val_clone
-        #     else:
-        #         unk_input[key] = val
-
-        # src_tokens', 'src_lengths', 'prev_output_tokens
         bz = sample["net_input"]['src_tokens'].size(0)
         unk_src_tokens = torch.tensor([self.unk_idx, self.eos_idx]).unsqueeze(0).expand(bz, 2).to(sample['net_input']['src_tokens'].device)
         unk_src_lengths = torch.full((bz,), 2, dtype=sample['net_input']['src_lengths'].dtype, device=sample['net_input']['src_lengths'].device)
         unk_input = {
-            'src_tokens': unk_src_tokens,
-            'src_lengths': unk_src_lengths,
+            'src_tokens': unk_src_tokens,  # (B, 2) - lm input = bz * [UNK, EOS]
+            'src_lengths': unk_src_lengths, # (B,) - lm input length = bz * 2
             'prev_output_tokens': sample["net_input"]['prev_output_tokens'].clone(),
         }
         
-        # print(unk_input.keys(),'!!!')
-        # print(unk_input['src_tokens'].shape, 'UNK Input Shape')
-        # print(unk_input['src_tokens'])
-        # print(unk_input['src_lengths'].shape, 'UNK Input Shape')
-        # print(unk_input['src_lengths'])
-                
         # Run LM Style Model
         unk_output = model(**unk_input)
         unk_lprobs = model.get_normalized_probs(unk_output, log_probs=True)  # (B, T, V) 
@@ -157,7 +141,17 @@ class MarginTokenLoss(FairseqCriterion):
         one_hot.scatter_(1, target.unsqueeze(1), 1.0)
 
         # compute adaptive mixed target
-        alpha = self.get_current_alpha()
+        # How to Learn in a Noisy World? Self-Correcting the Real-World Data Noise in Machine Translation
+        probs = probs.detach() 
+        entropy = -torch.sum(probs * lprobs.detach(), dim=1, keepdim=True)  # (B*T, 1)
+        max_entropy = torch.log(torch.tensor(V, dtype=probs.dtype, device=probs.device))  # log(V)
+        normalized_entropy = entropy / max_entropy  # normalize entropy
+
+        update_step = self.curr_step // self.update_freq
+        exponent =  -6. * (update_step + -0.6)
+        time_scalar = 1 / (1 + torch.exp(torch.tensor(exponent, dtype=probs.dtype, device=probs.device)))
+
+        alpha = (1-normalized_entropy) * time_scalar
         mixed_target = (1 - alpha) * one_hot + alpha * probs.detach()
 
         # compute mt loss
@@ -196,9 +190,9 @@ class MarginTokenLoss(FairseqCriterion):
         metrics.log_scalar("mt_loss", mt_loss_sum / sample_size, sample_size, round=3)
         metrics.log_scalar("margin_loss", margin_loss_sum / sample_size, sample_size, round=3)
 
-        if any("alpha" in log for log in logging_outputs):
-            last_alpha = next((log["alpha"] for log in reversed(logging_outputs) if "alpha" in log), 0.0)
-            metrics.log_scalar("alpha", last_alpha, 1, round=4)
+        # if any("alpha" in log for log in logging_outputs):
+        #     last_alpha = next((log["alpha"] for log in reversed(logging_outputs) if "alpha" in log), 0.0)
+        #     metrics.log_scalar("alpha", last_alpha, 1, round=4)
         if any("lambda" in log for log in logging_outputs):
             last_lambda = next((log["lambda"] for log in reversed(logging_outputs) if "lambda" in log), 0.0)
             metrics.log_scalar("lambda", last_lambda, 1, round=4)

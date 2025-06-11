@@ -152,7 +152,8 @@ class MarginTokenLoss(FairseqCriterion):
         time_scalar = 1 / (1 + torch.exp(torch.tensor(exponent, dtype=probs.dtype, device=probs.device)))
 
         alpha = (1-normalized_entropy) * time_scalar
-        mixed_target = (1 - alpha) * one_hot + alpha * probs.detach()
+        # print(alpha,time_scalar)
+        mixed_target = alpha * one_hot + (1-alpha) * probs.detach()
 
         # compute mt loss
         mt_loss = -(mixed_target * lprobs).sum(dim=1)
